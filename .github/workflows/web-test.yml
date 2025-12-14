@@ -1,62 +1,83 @@
-name: Web Test & Deploy to GitHub Pages
+name: Build Android APK
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
-  test-and-deploy:
+  build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
-
+    
     steps:
-    - name: 📥 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: ☕ Setup Java
+    
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
         java-version: '17'
-
-    - name: 🐦 Setup Flutter
+        cache: 'gradle'
+    
+    - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.0'
+        flutter-version: '3.24.5'
         channel: 'stable'
-
-    - name: 🚫 Disable analytics
-      run: flutter config --no-analytics
-
-    - name: 🌐 Enable Flutter Web
-      run: flutter config --enable-web
-
-    - name: 🎯 Create web platform files
-      run: flutter create . --platforms=web
-
-    - name: 📦 Get dependencies
+        cache: true
+    
+    - name: Get dependencies
       run: flutter pub get
-
-    - name: 🔍 Analyze code
-      run: flutter analyze --no-fatal-infos
+    
+    - name: Analyze project
+      run: flutter analyze
+    
+    - name: Run tests
+      run: flutter test
       continue-on-error: true
-
-    - name: 🏗️ Build web (release)
-      run: flutter build web --release --web-renderer html --base-href /jplayer/
-
-    - name: 📝 Add .nojekyll file
-      run: touch build/web/.nojekyll
-
-    - name: 🚀 Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      if: github.ref == 'refs/heads/main'
+    
+    - name: Build APK
+      run: flutter build apk --release
+    
+    - name: Build App Bundle
+      run: flutter build appbundle --release
+    
+    - name: Get version from pubspec.yaml
+      id: version
+      run: |
+        VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d '\r')
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+    
+    - name: Rename APK
+      run: |
+        mkdir -p releases
+        cp build/app/outputs/flutter-apk/app-release.apk releases/media-player-v${{ steps.version.outputs.VERSION }}.apk
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/web
-        force_orphan: true
+        name: media-player-apk
+        path: releases/*.apk
+        retention-days: 30
+    
+    - name: Upload App Bundle artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: media-player-aab
+        path: build/app/outputs/bundle/release/*.aab
+        retention-days: 30
+    
+    - name: Create Release on Tag
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          releases/*.apk
+          build/app/outputs/bundle/release/*.aab
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
