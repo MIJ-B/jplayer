@@ -1,0 +1,5 @@
+dependencies:
+  flutter:
+    sdk: flutter
+  video_player: ^2.8.0
+  audioplayers: ^5.2.0
