@@ -29,8 +29,16 @@ jobs:
         channel: 'stable'
         cache: true
     
+    - name: Clean Flutter
+      run: flutter clean
+    
     - name: Get dependencies
       run: flutter pub get
+    
+    - name: Remove old Android v1 files
+      run: |
+        rm -rf android/app/src/main/java
+        mkdir -p android/app/src/main/kotlin/com/example/jplayer
     
     - name: Analyze project
       run: flutter analyze --no-fatal-infos
